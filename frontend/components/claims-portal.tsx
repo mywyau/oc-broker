@@ -284,7 +284,7 @@ function Overview({ claimant, claims, approvedCount, reviewCount, onNavigate }: 
                 <span className="active-badge">Active</span>
               </div>
               <dl className="detail-list">
-                <div><dt>Claimant ID</dt><dd title={claimant.id}>{shortID(claimant.id)}</dd></div>
+                <div><dt>Claimant ID</dt><dd className="claimant-id-full">{claimant.id}</dd></div>
                 <div><dt>Registered</dt><dd>{formatDate(claimant.createdAt)}</dd></div>
               </dl>
               <button className="text-button" type="button" onClick={() => onNavigate("account")}>Open account <span>→</span></button>
@@ -360,7 +360,7 @@ function SubmitView({ claimant, busy, onSubmit }: { claimant: Claimant; busy: bo
           <label className="field"><span>Policy number</span><input name="policyNumber" minLength={3} placeholder="OC-2026-001" required /></label>
           <label className="field"><span>Incident date</span><input name="incidentDate" type="date" max={today} required /></label>
           <label className="field amount-field"><span>Claim amount</span><div className="input-combo"><select name="currency" aria-label="Currency" defaultValue="GBP"><option>GBP</option><option>EUR</option><option>USD</option></select><input name="amount" type="number" min="0.01" step="0.01" inputMode="decimal" placeholder="0.00" required /></div></label>
-          <div className="claimant-readonly"><span>Claimant</span><div className="mini-person"><div className="avatar small">{initials(claimant.fullName)}</div><div><strong>{claimant.fullName}</strong><small>{shortID(claimant.id)}</small></div></div></div>
+          <div className="claimant-readonly"><span>Claimant</span><div className="mini-person"><div className="avatar small">{initials(claimant.fullName)}</div><div><strong>{claimant.fullName}</strong><small className="claimant-id-full">{claimant.id}</small></div><CopyIDButton id={claimant.id} compact /></div></div>
           <label className="field full"><span>What happened?</span><textarea name="description" minLength={10} rows={5} placeholder="Describe the incident and the damage in a few sentences…" required /><small>At least 10 characters</small></label>
           <div className="form-actions full">
             <button className="button primary" disabled={busy} type="submit">{busy ? <Spinner /> : <Icon name="send" />} Submit claim</button>
@@ -427,7 +427,7 @@ function AccountView({ claimant, claims, busy, onLookup, onSubmit, onSwitch }: {
         <div><span>Claims on record</span><strong>{claims.length}</strong></div>
         <div><span>Total claimed</span><strong>{singleCurrency ? formatMoney(totalValue, claims[0].currency) : claims.length ? "Mixed currencies" : "—"}</strong></div>
         <div><span>Member since</span><strong>{formatDate(claimant.createdAt)}</strong></div>
-        <div><span>Account ID</span><strong title={claimant.id}>{shortID(claimant.id)}</strong></div>
+        <div className="account-id-metric"><span>Claimant ID</span><strong className="claimant-id-full">{claimant.id}</strong><CopyIDButton id={claimant.id} /></div>
       </section>
 
       <section className="panel history-panel">
@@ -467,7 +467,27 @@ function EmptyState({ icon, title, text, action, onAction }: { icon: IconName; t
 
 function Spinner() { return <span className="spinner" aria-label="Working" />; }
 
-type IconName = "grid" | "person" | "file" | "clock" | "shield" | "alert" | "check" | "info" | "spark" | "plus" | "eye" | "search" | "send" | "switch";
+function CopyIDButton({ id, compact = false }: { id: string; compact?: boolean }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copyID() {
+    try {
+      await navigator.clipboard.writeText(id);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      window.prompt("Copy claimant ID", id);
+    }
+  }
+
+  return (
+    <button className={compact ? "copy-id compact" : "copy-id"} type="button" onClick={copyID} aria-label="Copy full claimant ID">
+      <Icon name={copied ? "check" : "copy"} /> {compact ? "" : copied ? "Copied" : "Copy ID"}
+    </button>
+  );
+}
+
+type IconName = "grid" | "person" | "file" | "clock" | "shield" | "alert" | "check" | "info" | "spark" | "plus" | "eye" | "search" | "send" | "switch" | "copy";
 
 function Icon({ name }: { name: IconName }) {
   const paths: Record<IconName, ReactNode> = {
@@ -485,6 +505,7 @@ function Icon({ name }: { name: IconName }) {
     search: <><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></>,
     send: <><path d="m3 11 18-8-7 18-3-7z"/><path d="m11 14 10-11"/></>,
     switch: <><path d="M7 7h11l-3-3M17 17H6l3 3"/></>,
+    copy: <><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></>,
   };
   return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }

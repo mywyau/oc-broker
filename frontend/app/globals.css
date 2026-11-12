@@ -149,6 +149,7 @@ svg { width: 1.25rem; height: 1.25rem; display: block; }
 .detail-list dt, .detail-list dd { margin: 0; font-size: 9.5px; }
 .detail-list dt { color: var(--muted); }
 .detail-list dd { font-weight: 750; }
+.claimant-id-full { overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important; font-size: 8.5px !important; letter-spacing: -.015em; }
 .text-button { border: 0; padding: 13px 0 0; color: var(--teal); background: transparent; font-size: 10px; font-weight: 800; }
 .text-button span { margin-left: 3px; }
 .empty-state { min-height: 155px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; }
@@ -197,6 +198,7 @@ svg { width: 1.25rem; height: 1.25rem; display: block; }
 .input-combo input { border-radius: 0 10px 10px 0; }
 .claimant-readonly { display: grid; gap: 7px; }
 .mini-person { min-height: 43px; display: flex; align-items: center; gap: 10px; padding: 4px 9px; border: 1px solid #d8e0db; border-radius: 10px; background: #f2f5f2; }
+.mini-person > div:nth-child(2) { min-width: 0; flex: 1; }
 .mini-person strong, .mini-person small { display: block; }
 .mini-person strong { font-size: 10px; }
 .mini-person small { margin-top: 2px; color: var(--muted); font-size: 8px; }
@@ -224,6 +226,13 @@ svg { width: 1.25rem; height: 1.25rem; display: block; }
 .account-metrics span, .account-metrics strong { display: block; }
 .account-metrics span { color: var(--muted); font-size: 8.5px; }
 .account-metrics strong { margin-top: 7px; font-family: Georgia, serif; font-size: 17px; font-weight: 500; }
+.account-id-metric { position: relative; }
+.account-id-metric .claimant-id-full { max-width: 210px; line-height: 1.35; }
+.account-id-metric .copy-id { margin-top: 7px; }
+.copy-id { display: inline-flex; align-items: center; gap: 5px; border: 0; padding: 0; color: var(--teal); background: transparent; font-size: 8.5px; font-weight: 800; }
+.copy-id svg { width: 13px; height: 13px; }
+.copy-id.compact { width: 31px; height: 31px; flex: 0 0 auto; justify-content: center; border: 1px solid #d3ddda; border-radius: 9px; color: #58736f; background: white; }
+.copy-id.compact:hover { color: var(--teal); border-color: #9cc5bd; }
 .history-panel { padding: 26px 28px; }
 .spinner { width: 15px; height: 15px; border: 2px solid rgba(255,255,255,.42); border-top-color: white; border-radius: 50%; animation: spin .7s linear infinite; }
 
