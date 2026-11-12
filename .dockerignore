@@ -1,0 +1,7 @@
+.git
+.env
+bin
+coverage.out
+frontend/.next
+frontend/node_modules
+infrastructure/terraform/.terraform

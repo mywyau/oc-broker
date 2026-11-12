@@ -1,0 +1,12 @@
+.env
+.idea/
+.vscode/
+.DS_Store
+bin/
+coverage.out
+frontend/.next/
+frontend/node_modules/
+frontend/.env*.local
+infrastructure/terraform/.terraform/
+infrastructure/terraform/*.tfstate*
+infrastructure/terraform/.terraform.lock.hcl

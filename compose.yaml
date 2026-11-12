@@ -1,0 +1,105 @@
+name: oc-broker
+
+x-app: &app
+  build:
+    context: .
+  env_file:
+    - path: .env.example
+    - path: .env
+      required: false
+  restart: unless-stopped
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+    localstack:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: oc_broker
+      POSTGRES_USER: oc
+      POSTGRES_PASSWORD: oc
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oc -d oc_broker"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  localstack:
+    image: localstack/localstack:4.12.0
+    environment:
+      SERVICES: sqs
+      AWS_DEFAULT_REGION: eu-west-2
+      SQS_ENDPOINT_STRATEGY: path
+      LOCALSTACK_HOST: localstack:4566
+      LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:-}
+    ports:
+      - "4566:4566"
+    volumes:
+      - ./scripts/localstack-init.sh:/etc/localstack/init/ready.d/10-queues.sh:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          awslocal sqs get-queue-url --queue-name oc-claim-commands >/dev/null 2>&1
+          && awslocal sqs get-queue-url --queue-name oc-claim-events >/dev/null 2>&1
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    image: postgres:17-alpine
+    environment:
+      PGPASSWORD: oc
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./db/migrations:/migrations:ro
+    command: ["sh", "-c", "psql -v ON_ERROR_STOP=1 -h postgres -U oc -d oc_broker -f /migrations/001_initial.sql"]
+    restart: "no"
+
+  api:
+    <<: *app
+    build:
+      context: .
+      args:
+        TARGET: api
+    ports:
+      - "8080:8080"
+
+  outbox:
+    <<: *app
+    build:
+      context: .
+      args:
+        TARGET: outbox
+
+  worker:
+    <<: *app
+    build:
+      context: .
+      args:
+        TARGET: worker
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      OC_API_URL: http://api:8080
+      NEXT_TELEMETRY_DISABLED: "1"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
+    depends_on:
+      - api
+
+volumes:
+  postgres-data:
+  frontend-node-modules:
