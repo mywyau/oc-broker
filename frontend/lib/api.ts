@@ -1,4 +1,4 @@
-import type { APIProblem, Claim, Claimant, ClaimList } from "./types";
+import type { APIProblem, Claim, Claimant, ClaimantList, ClaimList } from "./types";
 
 const apiRoot = "/api/oc";
 
@@ -41,6 +41,11 @@ export const api = {
   health: () => request<{ status: string }>("/health/ready"),
   createClaimant: (input: { fullName: string; email: string }) =>
     request<Claimant>("/v1/claimants", { method: "POST", body: JSON.stringify(input) }),
+  listClaimants: ({ search = "", limit = 20, offset = 0 }: { search?: string; limit?: number; offset?: number } = {}) => {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (search.trim()) params.set("search", search.trim());
+    return request<ClaimantList>(`/v1/claimants?${params.toString()}`);
+  },
   getClaimant: (id: string) => request<Claimant>(`/v1/claimants/${encodeURIComponent(id)}`),
   listClaims: (claimantID: string) =>
     request<ClaimList>(`/v1/claimants/${encodeURIComponent(claimantID)}/claims`),

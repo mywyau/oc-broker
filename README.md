@@ -54,10 +54,11 @@ The first build downloads the Go, Node, PostgreSQL, and LocalStack dependencies.
 
 The portal supports the complete current workflow:
 
-1. Register a claimant or look up an existing claimant ID.
-2. Submit a claim with policy, incident, amount, and description details.
-3. Watch a claim move from `PENDING` to `APPROVED` or `REVIEW_REQUIRED`.
-4. Review the selected claimant's claim history.
+1. Register a claimant or find an existing claimant by name or email.
+2. Open their account or start a claim directly from the claimant directory.
+3. Submit a claim with policy, incident, amount, and description details.
+4. Watch a claim move from `PENDING` to `APPROVED` or `REVIEW_REQUIRED`.
+5. Review the selected claimant's claim history.
 
 The selected claimant ID is retained in browser storage for convenience. It is not an authentication mechanism.
 
@@ -129,6 +130,7 @@ Submitting the same `idempotencyKey` again returns the original claim rather tha
 | `GET` | `/health/live` | Process liveness |
 | `GET` | `/health/ready` | Database readiness |
 | `POST` | `/v1/claimants` | Register a claimant |
+| `GET` | `/v1/claimants?search=&limit=&offset=` | Search and paginate claimant summaries |
 | `GET` | `/v1/claimants/{id}` | View a claimant account |
 | `GET` | `/v1/claimants/{id}/claims` | View claim history |
 | `POST` | `/v1/claims` | Submit a claim |

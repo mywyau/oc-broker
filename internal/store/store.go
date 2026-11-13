@@ -34,6 +34,20 @@ type Claimant struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
+type ClaimantSummary struct {
+	Claimant
+	ClaimCount        int64     `json:"claimCount"`
+	LatestClaimStatus *string   `json:"latestClaimStatus,omitempty"`
+	LastActivityAt    time.Time `json:"lastActivityAt"`
+}
+
+type ClaimantPage struct {
+	Items  []ClaimantSummary
+	Total  int
+	Limit  int
+	Offset int
+}
+
 type Claim struct {
 	ID             uuid.UUID `json:"id"`
 	ClaimantID     uuid.UUID `json:"claimantId"`
@@ -108,6 +122,65 @@ func (s *Store) GetClaimant(ctx context.Context, id uuid.UUID) (Claimant, error)
 		return Claimant{}, ErrNotFound
 	}
 	return c, err
+}
+
+func (s *Store) ListClaimants(ctx context.Context, search string, limit, offset int) (ClaimantPage, error) {
+	search = strings.ToLower(strings.TrimSpace(search))
+	page := ClaimantPage{Items: make([]ClaimantSummary, 0), Limit: limit, Offset: offset}
+	if err := s.Pool.QueryRow(ctx, `
+		SELECT count(*)
+		FROM claimants
+		WHERE $1 = ''
+		   OR strpos(lower(full_name), $1) > 0
+		   OR strpos(lower(email), $1) > 0`, search).Scan(&page.Total); err != nil {
+		return ClaimantPage{}, fmt.Errorf("count claimants: %w", err)
+	}
+
+	rows, err := s.Pool.Query(ctx, `
+		SELECT c.id, c.full_name, c.email, c.active, c.created_at,
+		       stats.claim_count, stats.latest_claim_status,
+		       COALESCE(stats.last_activity_at, c.created_at) AS last_activity_at
+		FROM claimants c
+		LEFT JOIN LATERAL (
+			SELECT count(*) AS claim_count,
+			       max(updated_at) AS last_activity_at,
+			       (SELECT status
+			          FROM claims latest
+			         WHERE latest.claimant_id = c.id
+			         ORDER BY latest.created_at DESC
+			         LIMIT 1) AS latest_claim_status
+			FROM claims
+			WHERE claimant_id = c.id
+		) stats ON true
+		WHERE $1 = ''
+		   OR strpos(lower(c.full_name), $1) > 0
+		   OR strpos(lower(c.email), $1) > 0
+		ORDER BY COALESCE(stats.last_activity_at, c.created_at) DESC, c.id DESC
+		LIMIT $2 OFFSET $3`, search, limit, offset)
+	if err != nil {
+		return ClaimantPage{}, fmt.Errorf("list claimants: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var summary ClaimantSummary
+		if err := rows.Scan(
+			&summary.ID,
+			&summary.FullName,
+			&summary.Email,
+			&summary.Active,
+			&summary.CreatedAt,
+			&summary.ClaimCount,
+			&summary.LatestClaimStatus,
+			&summary.LastActivityAt,
+		); err != nil {
+			return ClaimantPage{}, fmt.Errorf("scan claimant summary: %w", err)
+		}
+		page.Items = append(page.Items, summary)
+	}
+	if err := rows.Err(); err != nil {
+		return ClaimantPage{}, fmt.Errorf("iterate claimant summaries: %w", err)
+	}
+	return page, nil
 }
 
 func (s *Store) CreateClaim(ctx context.Context, input NewClaim) (Claim, bool, error) {

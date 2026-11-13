@@ -9,8 +9,11 @@ import (
 	"log/slog"
 	"net/http"
 	"net/mail"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -34,12 +37,60 @@ func New(s *store.Store, logger *slog.Logger) http.Handler {
 	r.Get("/health/ready", a.ready)
 	r.Route("/v1", func(r chi.Router) {
 		r.Post("/claimants", a.createClaimant)
+		r.Get("/claimants", a.listClaimants)
 		r.Get("/claimants/{claimantID}", a.getClaimant)
 		r.Get("/claimants/{claimantID}/claims", a.listClaims)
 		r.Post("/claims", a.createClaim)
 		r.Get("/claims/{claimID}", a.getClaim)
 	})
 	return r
+}
+
+type claimantListQuery struct {
+	Search string
+	Limit  int
+	Offset int
+}
+
+func parseClaimantListQuery(values url.Values) (claimantListQuery, error) {
+	query := claimantListQuery{Search: strings.TrimSpace(values.Get("search")), Limit: 20}
+	if utf8.RuneCountInString(query.Search) > 100 {
+		return claimantListQuery{}, errors.New("search must contain at most 100 characters")
+	}
+	if raw := values.Get("limit"); raw != "" {
+		limit, err := strconv.Atoi(raw)
+		if err != nil || limit < 1 || limit > 100 {
+			return claimantListQuery{}, errors.New("limit must be an integer between 1 and 100")
+		}
+		query.Limit = limit
+	}
+	if raw := values.Get("offset"); raw != "" {
+		offset, err := strconv.Atoi(raw)
+		if err != nil || offset < 0 {
+			return claimantListQuery{}, errors.New("offset must be a non-negative integer")
+		}
+		query.Offset = offset
+	}
+	return query, nil
+}
+
+func (a *API) listClaimants(w http.ResponseWriter, r *http.Request) {
+	query, err := parseClaimantListQuery(r.URL.Query())
+	if err != nil {
+		problem(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	page, err := a.store.ListClaimants(r.Context(), query.Search, query.Limit, query.Offset)
+	if err != nil {
+		a.internalError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items":  page.Items,
+		"total":  page.Total,
+		"limit":  page.Limit,
+		"offset": page.Offset,
+	})
 }
 
 type createClaimantRequest struct {

@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { api, APIError } from "@/lib/api";
-import type { Claim, Claimant, ClaimStatus } from "@/lib/types";
+import type { Claim, Claimant, ClaimantSummary, ClaimStatus } from "@/lib/types";
 
-type View = "overview" | "register" | "submit" | "account";
+type View = "overview" | "claimants" | "register" | "submit" | "account";
 type Notice = { tone: "success" | "error" | "warning" | "info"; message: string } | null;
 
 const navigation: Array<{ id: View; label: string; icon: IconName }> = [
   { id: "overview", label: "Overview", icon: "grid" },
+  { id: "claimants", label: "Claimants", icon: "people" },
   { id: "register", label: "Register claimant", icon: "person" },
   { id: "submit", label: "Submit a claim", icon: "file" },
   { id: "account", label: "Claim history", icon: "clock" },
@@ -24,7 +25,7 @@ export function ClaimsPortal() {
   const [busy, setBusy] = useState(false);
   const [claimantPrompt, setClaimantPrompt] = useState(false);
 
-  async function loadAccount(id: string, navigate = true) {
+  async function loadAccount(id: string, destination: View | null = "account") {
     const cleanID = id.trim();
     if (!cleanID) return;
     setBusy(true);
@@ -38,10 +39,10 @@ export function ClaimsPortal() {
       setClaims(history.items);
       setClaimantPrompt(false);
       window.localStorage.setItem("oc-broker.claimant-id", nextClaimant.id);
-      if (navigate) setView("account");
+      if (destination) setView(destination);
     } catch (error) {
       setNotice({ tone: "error", message: getErrorMessage(error) });
-      if (navigate) setView("account");
+      if (destination) setView("claimants");
     } finally {
       setBusy(false);
     }
@@ -50,7 +51,7 @@ export function ClaimsPortal() {
   useEffect(() => {
     api.health().then(() => setHealth("online")).catch(() => setHealth("offline"));
     const savedClaimantID = window.localStorage.getItem("oc-broker.claimant-id");
-    if (savedClaimantID) void loadAccount(savedClaimantID, false);
+    if (savedClaimantID) void loadAccount(savedClaimantID, null);
   }, []);
 
   const hasPendingClaims = claims.some((claim) => claim.status === "PENDING");
@@ -92,7 +93,7 @@ export function ClaimsPortal() {
     event.preventDefault();
     const formElement = event.currentTarget;
     if (!claimant) {
-      setNotice({ tone: "info", message: "Register or look up a claimant before submitting a claim." });
+      setNotice({ tone: "info", message: "Register or select a claimant before submitting a claim." });
       setView("register");
       return;
     }
@@ -129,6 +130,10 @@ export function ClaimsPortal() {
       setView("register");
       return;
     }
+    if (nextView === "account" && !claimant) {
+      setView("claimants");
+      return;
+    }
     setClaimantPrompt(false);
     setView(nextView);
   }
@@ -138,7 +143,7 @@ export function ClaimsPortal() {
     setClaimant(null);
     setClaims([]);
     setNotice(null);
-    setView("register");
+    setView("claimants");
   }
 
   const approvedCount = claims.filter((claim) => claim.status === "APPROVED").length;
@@ -160,14 +165,14 @@ export function ClaimsPortal() {
               disabled={item.id === "submit" && !claimant}
               key={item.id}
               onClick={() => navigate(item.id)}
-              title={item.id === "submit" && !claimant ? "Register or look up a claimant first" : undefined}
+              title={item.id === "submit" && !claimant ? "Register or select a claimant first" : undefined}
               type="button"
             >
               <Icon name={item.icon} />
               <span>{item.label}</span>
             </button>
           ))}
-          {!claimant && <p className="nav-prerequisite"><Icon name="info" /> Register or look up a claimant to unlock claim submission.</p>}
+          {!claimant && <p className="nav-prerequisite"><Icon name="info" /> Register or select a claimant to unlock claim submission.</p>}
         </nav>
 
         <div className="sidebar-foot">
@@ -176,7 +181,7 @@ export function ClaimsPortal() {
             <strong>Secure workspace</strong>
             <p>Your claims are protected for peace of mind.</p>
           </div>
-          <p className="version">OC Broker · Core preview</p>
+          <p className="version">OC Broker</p>
         </div>
       </aside>
 
@@ -209,10 +214,18 @@ export function ClaimsPortal() {
             onNavigate={navigate}
           />
         )}
-        {view === "register" && <RegisterView busy={busy} prompted={claimantPrompt} onSubmit={registerClaimant} onLookup={loadAccount} />}
+        {view === "claimants" && (
+          <ClaimantsView
+            onOpen={(id) => loadAccount(id, "account")}
+            onRegister={() => navigate("register")}
+            onSubmit={(id) => loadAccount(id, "submit")}
+            selectedClaimantID={claimant?.id}
+          />
+        )}
+        {view === "register" && <RegisterView busy={busy} prompted={claimantPrompt} onSubmit={registerClaimant} onBrowse={() => navigate("claimants")} />}
         {view === "submit" && claimant && <SubmitView claimant={claimant} busy={busy} onSubmit={submitClaim} />}
         {view === "account" && (
-          <AccountView claimant={claimant} claims={claims} busy={busy} onLookup={loadAccount} onSubmit={() => navigate("submit")} onSwitch={clearAccount} />
+          <AccountView claimant={claimant} claims={claims} onBrowse={() => navigate("claimants")} onSubmit={() => navigate("submit")} onSwitch={clearAccount} />
         )}
       </main>
     </div>
@@ -290,7 +303,7 @@ function Overview({ claimant, claims, approvedCount, reviewCount, onNavigate }: 
               <button className="text-button" type="button" onClick={() => onNavigate("account")}>Open account <span>→</span></button>
             </>
           ) : (
-            <EmptyState icon="person" title="No claimant selected" text="Register a claimant or look up an existing account to begin." />
+            <EmptyState icon="person" title="No claimant selected" text="Register a claimant or choose an existing account from the directory." />
           )}
         </div>
       </section>
@@ -298,13 +311,153 @@ function Overview({ claimant, claims, approvedCount, reviewCount, onNavigate }: 
   );
 }
 
-function RegisterView({ busy, prompted, onSubmit, onLookup }: {
+const claimantPageSize = 10;
+
+function ClaimantsView({ onOpen, onRegister, onSubmit, selectedClaimantID }: {
+  onOpen: (id: string) => Promise<void>;
+  onRegister: () => void;
+  onSubmit: (id: string) => Promise<void>;
+  selectedClaimantID?: string;
+}) {
+  const [draftSearch, setDraftSearch] = useState("");
+  const [search, setSearch] = useState("");
+  const [offset, setOffset] = useState(0);
+  const [items, setItems] = useState<ClaimantSummary[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [selectingID, setSelectingID] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError("");
+    api.listClaimants({ search, limit: claimantPageSize, offset })
+      .then((page) => {
+        if (!active) return;
+        setItems(page.items);
+        setTotal(page.total);
+      })
+      .catch((cause) => {
+        if (!active) return;
+        setItems([]);
+        setTotal(0);
+        setError(getErrorMessage(cause));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, [search, offset]);
+
+  function applySearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setOffset(0);
+    setSearch(draftSearch.trim());
+  }
+
+  function clearSearch() {
+    setDraftSearch("");
+    setSearch("");
+    setOffset(0);
+  }
+
+  async function selectClaimant(id: string, action: (claimantID: string) => Promise<void>) {
+    setSelectingID(id);
+    try {
+      await action(id);
+    } finally {
+      setSelectingID("");
+    }
+  }
+
+  const firstResult = total === 0 ? 0 : offset + 1;
+  const lastResult = Math.min(offset + claimantPageSize, total);
+
+  return (
+    <div className="view-stack">
+      <section className="panel directory-panel">
+        <div className="directory-heading">
+          <div>
+            <p className="eyebrow">Claimant records</p>
+            <h2>Find the person you are helping.</h2>
+            <p>Open an account or start a claim without copying a claimant ID.</p>
+          </div>
+          <button className="button primary" type="button" onClick={onRegister}><Icon name="person" /> Register claimant</button>
+        </div>
+
+        <form className="directory-search" role="search" onSubmit={applySearch}>
+          <label>
+            <span className="search-icon"><Icon name="search" /></span>
+            <input
+              aria-label="Search claimants by name or email"
+              maxLength={100}
+              onChange={(event) => setDraftSearch(event.target.value)}
+              placeholder="Search by name or email"
+              type="search"
+              value={draftSearch}
+            />
+          </label>
+          <button className="button secondary" type="submit">Search</button>
+          {search && <button className="text-button clear-search" type="button" onClick={clearSearch}>Clear</button>}
+        </form>
+
+        <div className="directory-meta" aria-live="polite">
+          <span>{loading ? "Loading claimants…" : search ? `${total} result${total === 1 ? "" : "s"} for “${search}”` : `${total} registered claimant${total === 1 ? "" : "s"}`}</span>
+          {!loading && total > 0 && <span>Showing {firstResult}–{lastResult}</span>}
+        </div>
+
+        {error ? (
+          <div className="directory-error" role="alert"><Icon name="alert" /><div><strong>Could not load claimants</strong><p>{error}</p></div></div>
+        ) : loading ? (
+          <div className="directory-loading" role="status"><Spinner /> Loading claimant directory</div>
+        ) : items.length ? (
+          <div className="claimant-directory-list">
+            {items.map((item) => (
+              <article className={`claimant-directory-row${item.id === selectedClaimantID ? " selected" : ""}`} key={item.id}>
+                <div className="avatar">{initials(item.fullName)}</div>
+                <div className="directory-person">
+                  <div><strong>{item.fullName}</strong>{item.id === selectedClaimantID && <span className="selected-badge">Selected</span>}</div>
+                  <span>{item.email}</span>
+                </div>
+                <div className="directory-fact claim-count"><span>Claims</span><strong>{item.claimCount}</strong></div>
+                <div className="directory-fact latest-status"><span>Latest status</span>{item.latestClaimStatus ? <StatusBadge status={item.latestClaimStatus} /> : <strong>None yet</strong>}</div>
+                <div className="directory-fact last-activity"><span>Last activity</span><strong>{formatDate(item.lastActivityAt)}</strong></div>
+                <div className="directory-actions">
+                  <button className="button secondary" disabled={Boolean(selectingID)} type="button" onClick={() => void selectClaimant(item.id, onOpen)}>{selectingID === item.id ? "Opening…" : "Open account"}</button>
+                  <button className="icon-button" disabled={Boolean(selectingID)} type="button" onClick={() => void selectClaimant(item.id, onSubmit)} aria-label={`Submit a claim for ${item.fullName}`} title="Submit a claim"><Icon name="plus" /></button>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            icon="people"
+            title={search ? "No matching claimants" : "No claimants registered"}
+            text={search ? "Try a different name or email address." : "Register the first claimant to begin processing claims."}
+            action={search ? "Clear search" : "Register claimant"}
+            onAction={search ? clearSearch : onRegister}
+          />
+        )}
+
+        {!loading && !error && total > claimantPageSize && (
+          <div className="pagination" aria-label="Claimant directory pages">
+            <button className="button secondary" disabled={offset === 0} type="button" onClick={() => setOffset(Math.max(0, offset - claimantPageSize))}>← Previous</button>
+            <span>Page {Math.floor(offset / claimantPageSize) + 1} of {Math.ceil(total / claimantPageSize)}</span>
+            <button className="button secondary" disabled={offset + claimantPageSize >= total} type="button" onClick={() => setOffset(offset + claimantPageSize)}>Next →</button>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function RegisterView({ busy, prompted, onSubmit, onBrowse }: {
   busy: boolean;
   prompted: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onLookup: (id: string) => Promise<void>;
+  onBrowse: () => void;
 }) {
-  const [lookupID, setLookupID] = useState("");
   return (
     <div className="split-layout">
       <section className={prompted ? "panel form-panel prompted" : "panel form-panel"}>
@@ -315,7 +468,7 @@ function RegisterView({ busy, prompted, onSubmit, onLookup }: {
         {prompted && (
           <div className="requirement-note" role="status">
             <span><Icon name="person" /></span>
-            <div><strong>Claimant required</strong><p>Register someone below, or use the account lookup to continue with an existing claimant.</p></div>
+            <div><strong>Claimant required</strong><p>Register someone below, or choose an existing claimant from the directory.</p></div>
           </div>
         )}
         <form onSubmit={onSubmit} className="form-grid">
@@ -332,11 +485,8 @@ function RegisterView({ busy, prompted, onSubmit, onLookup }: {
         <section className={prompted ? "panel lookup-card prompted" : "panel lookup-card"}>
           <span className="side-icon"><Icon name="search" /></span>
           <h3>Already registered?</h3>
-          <p>Enter a claimant ID to restore their account and claim history.</p>
-          <form onSubmit={(event) => { event.preventDefault(); void onLookup(lookupID); }}>
-            <label className="field"><span>Claimant ID</span><input value={lookupID} onChange={(event) => setLookupID(event.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx" required /></label>
-            <button className="button secondary wide" disabled={busy} type="submit">Look up account</button>
-          </form>
+          <p>Search the claimant directory by name or email to restore their account and claim history.</p>
+          <button className="button secondary wide" type="button" onClick={onBrowse}><Icon name="people" /> Browse claimants</button>
         </section>
         <section className="guidance-card">
           <Icon name="info" />
@@ -384,28 +534,23 @@ function SubmitView({ claimant, busy, onSubmit }: { claimant: Claimant; busy: bo
   );
 }
 
-function AccountView({ claimant, claims, busy, onLookup, onSubmit, onSwitch }: {
+function AccountView({ claimant, claims, onBrowse, onSubmit, onSwitch }: {
   claimant: Claimant | null;
   claims: Claim[];
-  busy: boolean;
-  onLookup: (id: string) => Promise<void>;
+  onBrowse: () => void;
   onSubmit: () => void;
   onSwitch: () => void;
 }) {
-  const [lookupID, setLookupID] = useState("");
   const totalValue = useMemo(() => claims.reduce((sum, claim) => sum + claim.amountCents, 0), [claims]);
   const singleCurrency = claims.length > 0 && claims.every((claim) => claim.currency === claims[0].currency);
   if (!claimant) {
     return (
       <section className="panel centered-panel">
         <div className="large-icon"><Icon name="search" /></div>
-        <p className="eyebrow">Account lookup</p>
-        <h2>Find a claimant’s history.</h2>
-        <p>Enter the claiment's registration ID.</p>
-        <form className="lookup-form" onSubmit={(event) => { event.preventDefault(); void onLookup(lookupID); }}>
-          <input value={lookupID} onChange={(event) => setLookupID(event.target.value)} placeholder="Claimant UUID" aria-label="Claimant ID" required />
-          <button className="button primary" disabled={busy} type="submit">{busy ? <Spinner /> : <Icon name="search" />} Find account</button>
-        </form>
+        <p className="eyebrow">Claimant account</p>
+        <h2>Select a claimant first.</h2>
+        <p>Use the directory to find an account by name or email.</p>
+        <button className="button primary" type="button" onClick={onBrowse}><Icon name="people" /> Browse claimants</button>
       </section>
     );
   }
@@ -418,7 +563,7 @@ function AccountView({ claimant, claims, busy, onLookup, onSubmit, onSwitch }: {
           <div><span className="active-badge">Active claimant</span><h2>{claimant.fullName}</h2><p>{claimant.email}</p></div>
         </div>
         <div className="account-actions">
-          <button className="button secondary" type="button" onClick={onSwitch}><Icon name="switch" /> Switch account</button>
+          <button className="button secondary" type="button" onClick={onSwitch}><Icon name="switch" /> Switch claimant</button>
           <button className="button primary" type="button" onClick={onSubmit}><Icon name="plus" /> New claim</button>
         </div>
       </section>
@@ -487,12 +632,13 @@ function CopyIDButton({ id, compact = false }: { id: string; compact?: boolean }
   );
 }
 
-type IconName = "grid" | "person" | "file" | "clock" | "shield" | "alert" | "check" | "info" | "spark" | "plus" | "eye" | "search" | "send" | "switch" | "copy";
+type IconName = "grid" | "person" | "people" | "file" | "clock" | "shield" | "alert" | "check" | "info" | "spark" | "plus" | "eye" | "search" | "send" | "switch" | "copy";
 
 function Icon({ name }: { name: IconName }) {
   const paths: Record<IconName, ReactNode> = {
     grid: <><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></>,
     person: <><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></>,
+    people: <><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 5.5a3 3 0 0 1 0 5.8M17 14a5.5 5.5 0 0 1 4.5 5.5"/></>,
     file: <><path d="M6 2h8l4 4v16H6z"/><path d="M14 2v5h5M9 13h6M9 17h6"/></>,
     clock: <><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,
     shield: <><path d="M12 2 4.5 5v6c0 5 3 8.5 7.5 11 4.5-2.5 7.5-6 7.5-11V5z"/><path d="m9 12 2 2 4-5"/></>,
@@ -516,7 +662,7 @@ function getErrorMessage(error: unknown) {
 }
 
 function viewTitle(view: View) {
-  return { overview: "Good morning", register: "Register a claimant", submit: "Submit a claim", account: "Claimant account" }[view];
+  return { overview: "Good morning", claimants: "Claimants", register: "Register a claimant", submit: "Submit a claim", account: "Claimant account" }[view];
 }
 
 function initials(name: string) { return name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase(); }

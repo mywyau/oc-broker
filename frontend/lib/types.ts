@@ -8,6 +8,19 @@ export interface Claimant {
   createdAt: string;
 }
 
+export interface ClaimantSummary extends Claimant {
+  claimCount: number;
+  latestClaimStatus?: ClaimStatus;
+  lastActivityAt: string;
+}
+
+export interface ClaimantList {
+  items: ClaimantSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface Claim {
   id: string;
   claimantId: string;
